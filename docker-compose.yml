@@ -1,0 +1,98 @@
+version: "3"
+
+volumes:
+  postgres_data: {}
+  postgres_data_backups: {}
+
+services:
+  spark: &baseApp
+    build:
+      context: .
+      dockerfile: ./src/Dockerfile
+    ports:
+      - 4040:4040
+      - 7077:7077
+      - 8081:8081
+      - 8080:8080
+      - 18080:18080
+    env_file:
+      - ./.envs/.env_vars
+    restart: unless-stopped
+    command: sh /run.sh
+
+  airflow:
+    <<: *baseApp
+    volumes:
+      - ./src/main/dags:/opt/project/dags
+    ports:
+      - 5050:5050
+    environment:
+      - AIRFLOW__CORE__FERNET_KEY=PeszOD9t6wKNdNONTGh-k4qsYbsGHQ8CSqTQZlqPCDk=
+      - AIRFLOW_HOME=/opt/project
+    command: sh /airflow_run.sh
+
+  namenode:
+    image: bde2020/hadoop-namenode:1.1.0-hadoop2.8-java8
+    container_name: namenode
+    volumes:
+      - ./data/namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 50070:50070
+
+  datanode:
+    image: bde2020/hadoop-datanode:1.1.0-hadoop2.8-java8
+    depends_on:
+      - namenode
+    volumes:
+      - ./data/datanode:/hadoop/dfs/data
+    env_file:
+      - ./hadoop.env
+    ports:
+      - 50075:50075
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./postgres/Dockerfile
+    container_name: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:Z
+      - postgres_data_backups:/backups:z
+    env_file:
+      - ./.envs/.postgres
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.2.0
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    expose:
+      - "2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:5.2.0
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    expose:
+      - "9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "True"
+      KAFKA_CREATE_TOPICS: "test:1:1"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    restart: unless-stopped
