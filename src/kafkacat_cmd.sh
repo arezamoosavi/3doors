@@ -1,0 +1,1 @@
+docker-compose exec kafkacat kafkacat -b kafka:9092 -t atm_transactions -C -c2

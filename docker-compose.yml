@@ -30,42 +30,45 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=PeszOD9t6wKNdNONTGh-k4qsYbsGHQ8CSqTQZlqPCDk=
       - AIRFLOW_HOME=/opt/project
     command: sh /airflow_run.sh
-
-  namenode:
-    image: bde2020/hadoop-namenode:1.1.0-hadoop2.8-java8
-    container_name: namenode
-    volumes:
-      - ./data/namenode:/hadoop/dfs/name
-    environment:
-      - CLUSTER_NAME=test
-    env_file:
-      - ./hadoop.env
-    ports:
-      - 50070:50070
-
-  datanode:
-    image: bde2020/hadoop-datanode:1.1.0-hadoop2.8-java8
-    depends_on:
-      - namenode
-    volumes:
-      - ./data/datanode:/hadoop/dfs/data
-    env_file:
-      - ./hadoop.env
-    ports:
-      - 50075:50075
-
-  postgres:
-    build:
-      context: .
-      dockerfile: ./postgres/Dockerfile
-    container_name: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data:Z
-      - postgres_data_backups:/backups:z
-    env_file:
-      - ./.envs/.postgres
-    restart: unless-stopped
-
+  # jupyter:
+  #   <<: *baseApp
+  #   volumes:
+  #     - ./src/main/notebooks:/opt/project/notebooks
+  #   ports:
+  #     - 1100:1100
+  #   command: sh /jupyter_run.sh
+  # namenode:
+  #   image: bde2020/hadoop-namenode:1.1.0-hadoop2.8-java8
+  #   container_name: namenode
+  #   volumes:
+  #     - ./data/namenode:/hadoop/dfs/name
+  #   environment:
+  #     - CLUSTER_NAME=test
+  #   env_file:
+  #     - ./hadoop.env
+  #   ports:
+  #     - 50070:50070
+  # datanode:
+  #   image: bde2020/hadoop-datanode:1.1.0-hadoop2.8-java8
+  #   depends_on:
+  #     - namenode
+  #   volumes:
+  #     - ./data/datanode:/hadoop/dfs/data
+  #   env_file:
+  #     - ./hadoop.env
+  #   ports:
+  #     - 50075:50075
+  # postgres:
+  #   build:
+  #     context: .
+  #     dockerfile: ./postgres/Dockerfile
+  #   container_name: postgres
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data:Z
+  #     - postgres_data_backups:/backups:z
+  #   env_file:
+  #     - ./.envs/.postgres
+  #   restart: unless-stopped
   zookeeper:
     image: confluentinc/cp-zookeeper:5.2.0
     hostname: zookeeper
@@ -77,7 +80,6 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     restart: unless-stopped
-
   kafka:
     image: confluentinc/cp-kafka:5.2.0
     hostname: kafka
@@ -96,3 +98,9 @@ services:
       KAFKA_CREATE_TOPICS: "test:1:1"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     restart: unless-stopped
+
+  kafkacat:
+    image: confluentinc/cp-kafkacat
+    depends_on:
+      - kafka
+    command: "bash -c 'sleep infinity'"

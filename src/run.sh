@@ -23,4 +23,4 @@ start-slave.sh spark://app:7077
 
 echo "worker started at port 8081 ...."
 
-sleep 10
+sleep 10000000

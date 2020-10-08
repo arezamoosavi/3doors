@@ -90,13 +90,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /opt/project
 COPY ./src/main/dags ./opt/project
 COPY src/airflow.cfg /opt/project/airflow.cfg
-COPY ./src/main/bokeh_app.py ./opt/project/bokeh_app.py
 
 COPY src/run.sh /run.sh
 RUN chmod a+rwx /run.sh
 
-COPY src/bokeh_run.sh /bokeh_run.sh
-RUN chmod a+rwx /bokeh_run.sh
+COPY src/airflow_run.sh /airflow_run.sh
+RUN chmod a+rwx /airflow_run.sh
 
+COPY src/jupyter_run.sh /jupyter_run.sh
+RUN chmod a+rwx /jupyter_run.sh
 
 WORKDIR /opt/project

@@ -15,4 +15,4 @@ sleep 5
 
 echo "airflow app started ...."
 
-airflow webserver -p 5050 & sleep 5 & airflow scheduler
+airflow webserver -p 5050 & sleep 2 & airflow scheduler
