@@ -5,8 +5,6 @@ set -o errexit
 set -o nounset
 
 
-sleep 30
-
 echo "airflow database init ...."
 
 airflow initdb

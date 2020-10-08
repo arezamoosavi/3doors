@@ -29,7 +29,11 @@ kafka_dag = DAG(
 process_data_kafka = PythonOperator(
     task_id="data_to_kafka_producer",
     python_callable=process_data_kafka,
-    op_kwargs={"path_of_data": "dags/atm_data.csv", "broker_address": "kafka:9092",},
+    op_kwargs={
+        "path_of_data": "dags/atm_data.csv",
+        "broker_address": "kafka:9092",
+        "topic_name": "atm_transactions",
+    },
     dag=kafka_dag,
 )
 

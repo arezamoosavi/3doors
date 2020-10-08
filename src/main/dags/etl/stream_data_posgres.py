@@ -1,108 +1,85 @@
-import sys
-import os
-import json
-import logging
-import requests
-import io
+from __future__ import print_function, division, unicode_literals
 
-import tempfile
-import joblib
+from functools import partial
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import unix_timestamp
-from pyspark import SparkConf
-from datetime import datetime
+from pyspark.sql.functions import expr
+from pyspark.sql.functions import from_json
+from pyspark.sql.types import *
 
-from pyspark.ml import Pipeline
+# we want to change spark logging level
 
-from joblib import dump, load
-from sklearn.ensemble import RandomForestRegressor
-
-from utils.minio_connection import MinioClient
-
-try:
-    minio_obj = MinioClient()
-    minio_client = minio_obj.client()
-except Exception as e:
-    print(e)
+url = "jdbc:postgresql://postgres:5432/atmdb"
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel("DEBUG")
+def postgres_sink(df, epoch_id, table_name):
+    properties = {
+        "driver": "org.postgresql.Driver",
+        "user": "admin",
+        "password": "admin",
+    }
+
+    df.persist()
+
+    # 2- Write on postgres
+    df.write.jdbc(url=url, table=table_name, mode="append", properties=properties)
+
+    # 1- Save on hdfs
+    #
+    # df.write.format("csv").option("header", True).mode("overwrite").option(
+    #     "path",
+    #     "hdfs://namenode:8020/transactions",
+    # ).option(
+    #     "checkpointLocation",
+    #     "hdfs://namenode:8020/transactions/checkpoint",
+    # ).save()
+
+    df.unpersist()
 
 
-def develop_pred_model(hdfs_master, hdfs_path, run_time, **kwargs):
-    logger.info(f"PATH: {hdfs_master} {hdfs_path} {run_time}")
+def main():
+    TOPIC_NAME = "atm_transactions"
+    brokerAddresses = "kafka:9092"
 
-    conf = SparkConf()
-    conf.setAppName("Daily Model Stock")
-    spark = (
-        SparkSession.builder.master("spark://app:7077").config(conf=conf).getOrCreate()
+    # Creating stream.
+    spark = SparkSession.builder.appName("ATM_Streaming").getOrCreate()
+
+    sdf_transactions = (
+        spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", brokerAddresses)
+        .option("subscribe", TOPIC_NAME)
+        .option("startingOffsets", "earliest")
+        .load()
+        .selectExpr("CAST(value AS STRING)")
     )
 
-    logger.info("READing from hdfs")
-    _path = os.path.join(*[hdfs_master, hdfs_path, "tesla_pd_data"])
-    _df = spark.read.format("csv").option("header", "true").csv(f"{_path}/*.csv")
-
-    _df.show()
-    _df = _df.na.drop()
-
-    _df = _df.withColumn("price", _df["price"].cast("float").alias("price"))
-    _df = _df.withColumn("volume", _df["volume"].cast("float").alias("volume"))
-    _df = _df.withColumn(
-        "price_after_ten",
-        _df["price_after_ten"].cast("float").alias("price_after_ten"),
+    sdf_transactions_schema = StructType(
+        [
+            StructField("ATM_Name", StringType()),
+            StructField("Transaction_Date", TimestampType()),
+            StructField("No_Of_XYZ_Card_Withdrawals", IntegerType()),
+            StructField("No_Of_Other_Card_Withdrawals", IntegerType()),
+            StructField("Total_amount_Withdrawn", LongType()),
+            StructField("Amount_withdrawn_XYZ_Card", LongType()),
+            StructField("Amount_withdrawn_Other_Card", LongType()),
+            StructField("Weekday", StringType()),
+            StructField("Festival_Religion", StringType()),
+            StructField("Working_Day", StringType()),
+            StructField("Holiday_Sequence", StringType()),
+        ]
     )
-    _df = _df.withColumn(
-        "price_at_20", _df["price_at_20"].cast("float").alias("price_at_20")
-    )
-    _df = _df.withColumn("date", _df["date"].cast("timestamp").alias("date"))
 
-    _df.printSchema()
-    _df = _df.orderBy("date", ascending=True)
-    _df.show()
+    sdf_transactions = sdf_transactions.select(
+        from_json("value", sdf_transactions_schema).alias("a")
+    ).select("a.*")
 
-    logger.info("df to pandas:")
-    pd_df = _df.toPandas()
+    # Apply watermarks on event-time columns
+    sdf_transactions = sdf_transactions.withWatermark("Transaction_Date", "10 seconds")
 
-    logger.info("SHAPE is: ")
-    logger.info(pd_df.shape)
-    logger.info(f"\n {pd_df.head(8)}")
+    sdf_transactions.writeStream.outputMode("append").format("csv").foreachBatch(
+        partial(postgres_sink, table_name="atm_transactions")
+    ).start().awaitTermination()
 
-    logger.info("DOing ML: ")
 
-    X = pd_df.drop(["price_after_ten", "date"], axis=1)
-    y = pd_df["price_after_ten"]
-    reg = RandomForestRegressor(n_estimators=200, random_state=101)
-    reg.fit(X, y)
-
-    accuracy = float("{0:.2f}".format(reg.score(X, y) * 100))
-    print("\n" * 2, "Train Accuracy is: ", accuracy, "%", "\n" * 2)
-
-    # WRITE
-    logger.info("Write to minio: ")
-    with tempfile.TemporaryFile() as fp:
-        joblib.dump(reg, fp)
-        fp.seek(0)
-        _buffer = io.BytesIO(fp.read())
-        _length = _buffer.getbuffer().nbytes
-        minio_client.put_object(
-            bucket_name="stock",
-            object_name="models/tesla.joblib",
-            data=_buffer,
-            length=_length,
-        )
-
-    # READ
-    logger.info("Read from minio: ")
-    with tempfile.NamedTemporaryFile() as tmp:
-
-        logger.info(f"model file {tmp.name}")
-        minio_client.fget_object("stock", "models/tesla.joblib", tmp.name)
-        model_pred = joblib.load(tmp.name)
-
-    logger.info("Test with loaded model from minio: ")
-    accuracy = float("{0:.2f}".format(model_pred.score(X, y) * 100))
-    print("\n" * 2, "Train Accuracy is: ", accuracy, "%", "\n" * 2)
-
-    return "Done!"
+if __name__ == "__main__":
+    main()

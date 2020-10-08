@@ -91,6 +91,8 @@ RUN mkdir -p /opt/project
 COPY ./src/main/dags ./opt/project
 COPY src/airflow.cfg /opt/project/airflow.cfg
 
+COPY ./src/jars ./opt/project
+
 COPY src/run.sh /run.sh
 RUN chmod a+rwx /run.sh
 

@@ -1,63 +1,32 @@
-# import logging
-# from datetime import datetime, timedelta
-# from airflow import DAG
-# from airflow.operators.bash_operator import BashOperator
-# from airflow.operators.python_operator import PythonOperator
+from __future__ import print_function
+from datetime import datetime
 
-# from dags.etl.make_pred_model import develop_pred_model
-# from dags.etl.formatting_data import develop_data_model
+import airflow
+from airflow.operators.bash_operator import BashOperator
 
 
-# logger = logging.getLogger(__name__)
-# logger.setLevel("WARNING")
+args = {
+    "owner": "3doors",
+    "start_date": datetime(year=2020, month=9, day=10, hour=1, minute=0, second=0),
+    "provide_context": True,
+}
 
+dag = airflow.DAG(
+    dag_id="spark_atm_streaming",
+    default_args=args,
+    schedule_interval="@once",
+    max_active_runs=1,
+)
 
-# args = {
-#     "owner": "3doors",
-#     "start_date": datetime(year=2020, month=9, day=10, hour=1, minute=0, second=0),
-#     "provide_context": True,
-# }
+create_spark_streaming_kafka = BashOperator(
+    task_id="etl_streaming_data",
+    bash_command="spark-submit "
+    "--packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.7,org.apache.kafka:kafka-clients:2.3.0 "
+    "--jars {{var.value.airflow_home}}/postgresql-9.4.1207.jre6.jar "
+    "--master spark://spark:7077 "
+    "--num-executors 1 --driver-memory 1g --executor-memory 1g --executor-cores 1 "
+    "{{var.value.airflow_home}}/dags/etl/stream_data_posgres.py ",
+    dag=dag,
+)
 
-
-# ml_dag = DAG(
-#     dag_id="daily_ml_stock_data",
-#     default_args=args,
-#     schedule_interval="@daily",
-#     max_active_runs=1,
-# )
-
-
-# pred_stock_model = PythonOperator(
-#     task_id="create_hourly_stock_etl",
-#     python_callable=develop_pred_model,
-#     op_kwargs={
-#         "hdfs_master": "{{var.value.hdfs_master}}",
-#         "hdfs_path": "{{var.value.hdfs_path}}",
-#         "run_time": "{{yesterday_ds}}",
-#     },
-#     dag=ml_dag,
-# )
-
-# pred_stock_model
-
-
-# format_dag = DAG(
-#     dag_id="create_data_model_stock_data",
-#     default_args=args,
-#     schedule_interval="*/5 * * * *",
-#     max_active_runs=1,
-# )
-
-
-# create_data_model = PythonOperator(
-#     task_id="create_data_model",
-#     python_callable=develop_data_model,
-#     op_kwargs={
-#         "hdfs_master": "{{var.value.hdfs_master}}",
-#         "hdfs_path": "{{var.value.hdfs_path}}",
-#         "run_time": "{{yesterday_ds}}",
-#     },
-#     dag=format_dag,
-# )
-
-# create_data_model
+create_spark_streaming_kafka

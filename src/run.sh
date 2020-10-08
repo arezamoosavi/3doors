@@ -19,8 +19,8 @@ echo "Master started at port 8080 ...."
 
 echo "worker is sarting ...."
 
-start-slave.sh spark://app:7077
+start-slave.sh spark://spark:7077
 
 echo "worker started at port 8081 ...."
 
-sleep 10000000
+sleep infinity

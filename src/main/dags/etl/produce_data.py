@@ -1,4 +1,5 @@
 import csv, os, logging
+from datetime import datetime
 from kafka import KafkaProducer
 from json import dumps
 
@@ -6,7 +7,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel("DEBUG")
 
 
-def process_data_kafka(path_of_data, broker_address, **kwargs):
+def process_data_kafka(path_of_data, broker_address, topic_name, **kwargs):
     producer = KafkaProducer(
         bootstrap_servers=[broker_address],
         value_serializer=lambda x: dumps(x).encode("utf-8"),
@@ -21,7 +22,8 @@ def process_data_kafka(path_of_data, broker_address, **kwargs):
             logger.info("File is here!")
             for row in reader:
                 data = dict(row)
-                producer.send("atm_transactions", value=data)
+                # data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                producer.send(topic_name, value=data)
                 producer.flush()
 
         return "Done"
