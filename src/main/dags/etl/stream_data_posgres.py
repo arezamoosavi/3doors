@@ -3,7 +3,7 @@ from __future__ import print_function, division, unicode_literals
 from functools import partial
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import expr
+from pyspark.sql.functions import expr, split
 from pyspark.sql.functions import from_json
 from pyspark.sql.types import *
 
@@ -35,6 +35,16 @@ def postgres_sink(df, epoch_id, table_name):
     # ).save()
 
     df.unpersist()
+
+
+def parse_data_from_kafka_message(sdf, schema):
+
+    assert sdf.isStreaming == True, "DataFrame doesn't receive streaming data"
+    col = split(sdf["value"], ",")  # split attributes to nested array in one Column
+    # now expand col to multiple top-level columns
+    for idx, field in enumerate(schema):
+        sdf = sdf.withColumn(field.name, col.getItem(idx).cast(field.dataType))
+    return sdf.select([field.name for field in schema])
 
 
 def main():
@@ -69,15 +79,20 @@ def main():
         ]
     )
 
-    sdf_transactions = sdf_transactions.select(
-        from_json("value", sdf_transactions_schema).alias("a")
-    ).select("a.*")
+    sdf_transactions_data = parse_data_from_kafka_message(
+        sdf_transactions, sdf_transactions_schema
+    )
+    # sdf_transactions_data = sdf_transactions.select(
+    #     from_json("value", sdf_transactions_schema).alias("a")
+    # ).select("a.*")
 
     # Apply watermarks on event-time columns
-    sdf_transactions = sdf_transactions.withWatermark("Transaction_Date", "10 seconds")
+    sdf_transactions_data = sdf_transactions_data.withWatermark(
+        "Transaction_Date", "5 seconds"
+    )
 
-    sdf_transactions.writeStream.outputMode("append").format("csv").foreachBatch(
-        partial(postgres_sink, table_name="atm_transactions")
+    sdf_transactions_data.writeStream.outputMode("append").format("csv").foreachBatch(
+        partial(postgres_sink, table_name="atm_data")
     ).start().awaitTermination()
 
 

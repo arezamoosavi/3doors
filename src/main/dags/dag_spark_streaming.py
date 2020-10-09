@@ -25,6 +25,7 @@ create_spark_streaming_kafka = BashOperator(
     "--jars {{var.value.airflow_home}}/postgresql-9.4.1207.jre6.jar "
     "--master spark://spark:7077 "
     "--num-executors 1 --driver-memory 1g --executor-memory 1g --executor-cores 1 "
+    "--conf spark.streaming.backpressure.enabled=true "
     "{{var.value.airflow_home}}/dags/etl/stream_data_posgres.py ",
     dag=dag,
 )

@@ -63,13 +63,11 @@ services:
     ports:
       - 50075:50075
   postgres:
-    build:
-      context: .
-      dockerfile: ./postgres/Dockerfile
+    image: postgres:12.3
     container_name: postgres
     volumes:
-      - postgres_data:/var/lib/postgresql/data:Z
-      - postgres_data_backups:/backups:z
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_backups:/backups
     env_file:
       - ./.envs/.postgres
     restart: unless-stopped
